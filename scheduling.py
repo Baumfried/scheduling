@@ -65,25 +65,20 @@ ascii_calendar     = False
 graphical_calendar = True
 
 class Schedule:
-    def __init__(self, **kwargs):
-        try:
-            self.table = kwargs['table']
-        except KeyError:
-            self.table = self.create_schedule(kwargs['subjects'],
-                                              kwargs['allocations'])
+    def __init__(self, subjects, allocations, blank, indices):
+        self.table = blank.copy()
+        self.create_schedule(subjects, allocations, indices)
     
-    def create_schedule(self, subjects, allocations):
+    def create_schedule(self, subjects, allocations, ind):
         print("creating new schedule ...")
-        
-        newsched = Schedule.empty_schedule()
         
         for i in range(len(subjects)):
             for j in range(len(subjects[i].times)):
                 if allocations[i].array[j]:
                     subject = subjects[i]
                     selected_time = subject.times[j]
-                    if Schedule.is_free(newsched, selected_time):
-                        Schedule.fill(newsched, subject, selected_time)
+                    if Schedule.is_free(self.table, selected_time, ind):
+                        Schedule.fill(self.table, subject, selected_time, ind)
                         subject.mark_allocated(selected_time)
         
         for subject in subjects:
@@ -91,26 +86,22 @@ class Schedule:
                 for selected_time in subject.times:
                     if (
                         selected_time not in subject.allocated_times and
-                        Schedule.is_free(newsched, selected_time)
+                        Schedule.is_free(self.table, selected_time, ind)
                     ):
-                        Schedule.fill(newsched, subject, selected_time)
+                        Schedule.fill(self.table, subject, selected_time, ind)
                         subject.mark_allocated(selected_time)
         
         self.is_incomplete = False
-        total_failure      = False
+        self.failed        = False
         
         for subject in subjects:
             if not subject.is_partially_complete():
-                total_failure = True
+                self.failed = True
             elif not subject.is_complete():
                 self.is_incomplete = True
             subject.reset()
         
-        if not total_failure:
-            return newsched
-        else:
-            print("abandoning: failed to include all subjects\n")
-            return
+        return self.table
     
     def __eq__(self, other):
         return self.table == other.table
@@ -123,18 +114,18 @@ class Schedule:
                     sched[datetime(year,month,day,hh,mm)] = ""
         return sched
     
-    def is_free(schedule, selected_time):
-        t = selected_time[0]
-        while t < selected_time[1]:
-            if schedule[t]: return False
-            t += timedelta(minutes=5)
+    def is_free(schedule, selected_time, indices):
+        t1 = indices.index(selected_time[0])
+        t2 = indices.index(selected_time[1])
+        for t in range(t1, t2):
+            if schedule[indices[t]]: return False
         return True
     
-    def fill(schedule, subject, selected_time):
-        t = selected_time[0]
-        while t < selected_time[1]:
-            schedule[t] = subject.name
-            t += timedelta(minutes=5)
+    def fill(schedule, subject, selected_time, indices):
+        t1 = indices.index(selected_time[0])
+        t2 = indices.index(selected_time[1])
+        for t in range(t1, t2):
+            schedule[indices[t]] = subject.name
 
 class Subject:
     name_pattern = re.compile(r"(.+)\.txt$")
@@ -287,7 +278,7 @@ def setup(in_dir_name, out_dir_name):
     
     return subjects
 
-def percolate(subjects, allocations):
+def percolate(allocations):
     for i in range(len(allocations)):
         if allocations[i].has_reached_end:
             allocations[i].reset_end_status()
@@ -304,19 +295,14 @@ def percolate(subjects, allocations):
         permutations.add(perm_check)
     
     global saved_schedules, duplicates, version
-    schedule  = Schedule(subjects = subjects, allocations = allocations)
-    failed    = False
-    duplicate = False
-    try:
-        if any([schedule == element for element in saved_schedules]):
-            duplicate = True
-            duplicates += 1
-            print("abandoning: duplicate of existing schedule\n")
-    except (AttributeError, TypeError):
-        failed = True
-    if not schedule.table: failed = True
+    schedule = Schedule(subjects, allocations, empty_schedule, indices)
     
-    if not duplicate and not failed:
+    if schedule.failed:
+        print("abandoning: failed to include all subjects\n")
+    elif any([schedule == element for element in saved_schedules]):
+        duplicates += 1
+        print("abandoning: duplicate of existing schedule\n")
+    else:
         if not schedule.is_incomplete:
             print("schedule successfully completed!")
         else:
@@ -333,7 +319,7 @@ def percolate(subjects, allocations):
     
     for i in range(len(allocations)):
         allocations[i].advance()
-        percolate(subjects, allocations)
+        percolate(allocations)
         allocations[i].reverse()
 
 def create_filename(schedule):
@@ -348,6 +334,7 @@ def plain_write(schedule):
     schedule_dir = "./"+out_dir_name+"/"
     schedule_filename = create_filename(schedule)+".txt"
     print("saving as "+schedule_dir+schedule_filename)
+    
     with open(schedule_dir + schedule_filename, "w") as fh:
         for step in schedule.table:
             fh.write(weekday_abbrevs[step.weekday()]+" "
@@ -356,15 +343,16 @@ def plain_write(schedule):
 
 def fancy_write(schedule):
     field_width  = 25
-    schedule_dir = "./"+out_dir_name+"/"
-    schedule_filename = create_filename(schedule)+"ascii.txt"
     row          = "{0:^" + str(field_width) + "s}"
     toprow       = "      "
     for i in range(5):
         toprow += "{"+str(i)+":^"+str(field_width)+"s}"
     toprow += "\n"
     
+    schedule_dir = "./"+out_dir_name+"/"
+    schedule_filename = create_filename(schedule)+"ascii.txt"
     print("saving as "+schedule_dir+schedule_filename)
+    
     with open(schedule_dir + schedule_filename, "w") as fh:
         t = datetime(year,month,day0,start_of_day)
         fh.write(toprow.format(*weekdays.values()))
@@ -379,10 +367,6 @@ def fancy_write(schedule):
             t += timedelta(days=-5, minutes=5)
 
 def create_graphical_calendar(schedule, subjects):
-    schedule_dir = "./"+out_dir_name+"/"
-    schedule_filename = create_filename(schedule)+".png"
-    print("saving graphical calendar as "+schedule_dir+schedule_filename)
-    
     res_x          = 1200
     res_y          = 740
     top_row        = 22
@@ -514,6 +498,9 @@ def create_graphical_calendar(schedule, subjects):
             except ValueError:
                 pass
     
+    schedule_dir = "./"+out_dir_name+"/"
+    schedule_filename = create_filename(schedule)+".png"
+    print("saving graphical calendar as "+schedule_dir+schedule_filename)
     img.save(schedule_dir+schedule_filename)
     
     global version
@@ -562,16 +549,18 @@ version         = 0
 duplicates      = 0
 saved_schedules = list()
 permutations    = set()
+empty_schedule  = Schedule.empty_schedule()
+indices         = sorted(empty_schedule.keys())
 subjects        = setup(in_dir_name, out_dir_name)
+allocations     = [Allocation(subject) for subject in subjects]
 
 threading.stack_size(custom_stack_size)
 old_rec_limit = sys.getrecursionlimit()
 sys.setrecursionlimit(custom_rec_limit)
-thread = threading.Thread(target = percolate, args = (subjects,
-                [Allocation(subject) for subject in subjects]))
+thread = threading.Thread(target = percolate, args = (allocations,))
 thread.start()
 thread.join()
-sleep(1)
+sleep(0.2)
 sys.setrecursionlimit(old_rec_limit)
 threading.stack_size()
 
