@@ -46,8 +46,11 @@ from time import sleep
 in_dir_name  = "subjects"
 out_dir_name = "schedules"
 
+cleanup_at_start = True
+
 start_of_day = 8
-end_of_day   = 20
+end_of_day   = 19
+no_of_days   = 5
 
 weekdays = {
             0:"Montag",
@@ -63,6 +66,7 @@ abbreviation_length = 2
 text_file          = False
 ascii_calendar     = False
 graphical_calendar = True
+cal_resolution     = (1200,740)
 
 class Schedule:
     def __init__(self, subjects, allocations, blank, indices):
@@ -108,7 +112,7 @@ class Schedule:
     
     def empty_schedule():
         sched = dict()
-        for day in range(day0, day0 + 5):
+        for day in range(day0, day0 + no_of_days):
             for hh in range(start_of_day, end_of_day):
                 for mm in range(0, 60, 5):
                     sched[datetime(year,month,day,hh,mm)] = ""
@@ -247,12 +251,9 @@ def weekday_number(weekday):
     for i in range(7):
         if re.match(weekday_patterns[i], weekday): return i
 
-def setup(in_dir_name, out_dir_name):
-    subject_dir        = "."+slash+in_dir_name+slash
-    schedule_dir       = "."+slash+out_dir_name+slash
-    local_files        = glob.glob("*")
-    filename_pattern   = re.compile(r"\."+slash+slash2+in_dir_name
-                                    +slash+slash2+r"(.*)")
+def load_subjects(subject_dir):
+    filename_pattern   = re.compile(
+            r"\."+slash+slash2+in_dir_name+slash+slash2+r"(.*)")
     subject_file_paths = glob.glob(subject_dir+"*.txt")
     
     if subject_file_paths:
@@ -266,15 +267,6 @@ def setup(in_dir_name, out_dir_name):
         if not in_dir_name in local_files:
             os.popen("mkdir "+subject_dir)
         sys.exit()
-    
-    if out_dir_name in local_files:
-        print("cleaning up in "+schedule_dir+" ...\n")
-        os.popen(delcmd+" "+schedule_dir+"*")
-    else:
-        print("creating schedule directory under "+schedule_dir+" ...\n")
-        os.popen("mkdir "+schedule_dir)
-    
-    sleep(1)
     
     return subjects
 
@@ -314,7 +306,7 @@ def percolate(allocations):
         if ascii_calendar:
             fancy_write(schedule)
         if graphical_calendar:
-            create_graphical_calendar(schedule, subjects)
+            create_graphical_calendar(schedule, subjects, *cal_resolution)
         print()
     
     for i in range(len(allocations)):
@@ -345,7 +337,7 @@ def fancy_write(schedule):
     field_width  = 25
     row          = "{0:^" + str(field_width) + "s}"
     toprow       = "      "
-    for i in range(5):
+    for i in range(no_of_days):
         toprow += "{"+str(i)+":^"+str(field_width)+"s}"
     toprow += "\n"
     
@@ -359,19 +351,17 @@ def fancy_write(schedule):
         while t.hour < end_of_day:
             fh.write("{0:6s}".format(re.search(dtpattern, str(t)).group(1)))
             d = 0
-            while d < 5:
+            while d < no_of_days:
                 fh.write(row.format(schedule.table[t]))
                 t += timedelta(days=1)
                 d += 1
             fh.write("\n")
-            t += timedelta(days=-5, minutes=5)
+            t += timedelta(days=-no_of_days, minutes=5)
 
-def create_graphical_calendar(schedule, subjects):
-    res_x          = 1200
-    res_y          = 740
-    top_row        = 22
-    first_column   = 70
-    celltxt_offset = (3,3)
+def create_graphical_calendar(schedule, subjects, res_x, res_y):
+    first_column   = int(0.0583 * res_x)
+    top_row        = int(0.0297 * res_y)
+    celltxt_offset = (res_x//400, res_x//400)
     bg_color       = "white"
     line_color     = "#cccccc"
     labeltxt_color = "black"
@@ -379,8 +369,9 @@ def create_graphical_calendar(schedule, subjects):
     celltxt_color2 = "black"   # for light background
     
     try:
-        fnt1 = ImageFont.truetype('arial.ttf', 15)
-        fnt2 = ImageFont.truetype('arial.ttf', 12)
+        fnt0 = ImageFont.truetype('arialbd.ttf', res_x // 80)
+        fnt1 = ImageFont.truetype('arial.ttf', res_x // 80)
+        fnt2 = ImageFont.truetype('arial.ttf', res_x // 100)
     except OSError:
         try:
             fnt1 = ImageFont.truetype('Pillow/Tests/fonts/FreeSans.ttf', 16)
@@ -393,7 +384,7 @@ def create_graphical_calendar(schedule, subjects):
     draw = ImageDraw.Draw(img)
     
     # map x coordinates to days
-    x_begofday = np.linspace(first_column, res_x, 6)
+    x_begofday = np.linspace(first_column, res_x, no_of_days + 1)
     
     # map y coordinates to times
     y_begoftime = dict()
@@ -413,15 +404,15 @@ def create_graphical_calendar(schedule, subjects):
         t += timedelta(minutes=15)
     
     # draw vertical lines
-    for i in range(5):
+    for i in range(no_of_days):
         draw.line([(x_begofday[i],0), (x_begofday[i],res_y)], fill=line_color)
     
     # label top row with weekdays
-    day_width = (res_x - first_column) / 5
-    for i in range(5):
-        w, h = draw.textsize(weekdays[i], font=fnt1)
+    day_width = (res_x - first_column) / no_of_days
+    for i in range(no_of_days):
+        w, h = draw.textsize(weekdays[i], font=fnt0)
         draw.text((x_begofday[i] + (day_width - w)/2, 3), weekdays[i],
-                  fill=labeltxt_color, font=fnt1)
+                  fill=labeltxt_color, font=fnt0)
     
     # label first column with times
     t = datetime(year, month, day0, start_of_day)
@@ -469,7 +460,7 @@ def create_graphical_calendar(schedule, subjects):
                 
                 w, h = draw.textsize(subj_name, font=fnt1)
                 
-                if rect_end_y - rect_beg_y <= 2 * (h + celltxt_offset[1]):
+                if rect_end_y - rect_beg_y < 2 * (h + celltxt_offset[1]):
                     celltxto = (celltxt_offset[0], 1)
                 else:
                     celltxto = celltxt_offset
@@ -545,13 +536,27 @@ year  = 2017
 month = 10
 day0  = 2
 
+local_files     = glob.glob("*")
+subject_dir     = "." + slash + in_dir_name  + slash
+schedule_dir    = "." + slash + out_dir_name + slash
+
+subjects        = load_subjects(subject_dir)
+
+if out_dir_name in local_files:
+    print("cleaning up in "+schedule_dir+" ...\n")
+    os.popen(delcmd+" "+schedule_dir+"*")
+else:
+    print("creating schedule directory under "+schedule_dir+" ...\n")
+    os.popen("mkdir "+schedule_dir)
+
+sleep(0.8)
+
 version         = 0
 duplicates      = 0
 saved_schedules = list()
 permutations    = set()
 empty_schedule  = Schedule.empty_schedule()
 indices         = sorted(empty_schedule.keys())
-subjects        = setup(in_dir_name, out_dir_name)
 allocations     = [Allocation(subject) for subject in subjects]
 
 threading.stack_size(custom_stack_size)
