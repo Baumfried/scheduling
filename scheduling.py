@@ -52,15 +52,15 @@ start_of_day = 8
 end_of_day   = 19
 no_of_days   = 5
 
-weekdays = {
-            0:"Montag",
-            1:"Dienstag",
-            2:"Mittwoch",
-            3:"Donnerstag",
-            4:"Freitag",
-            5:"Samstag",
-            6:"Sonntag"
-}
+weekdays = [
+        "Montag",
+        "Dienstag",
+        "Mittwoch",
+        "Donnerstag",
+        "Freitag",
+        "Samstag",
+        "Sonntag"
+]
 abbreviation_length = 2
 
 text_file          = False
@@ -347,7 +347,7 @@ def fancy_write(schedule):
     
     with open(schedule_dir + schedule_filename, "w") as fh:
         t = datetime(year,month,day0,start_of_day)
-        fh.write(toprow.format(*weekdays.values()))
+        fh.write(toprow.format(*weekdays))
         while t.hour < end_of_day:
             fh.write("{0:6s}".format(re.search(dtpattern, str(t)).group(1)))
             d = 0
