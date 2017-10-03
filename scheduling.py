@@ -542,8 +542,9 @@ schedule_dir    = "." + slash + out_dir_name + slash
 subjects        = load_subjects(subject_dir)
 
 if out_dir_name in local_files:
-    print("cleaning up in "+schedule_dir+" ...\n")
-    os.popen(delcmd+" "+schedule_dir+"*")
+    if cleanup_at_start:
+        print("cleaning up in "+schedule_dir+" ...\n")
+        os.popen(delcmd+" "+schedule_dir+"*")
 else:
     print("creating schedule directory under "+schedule_dir+" ...\n")
     os.popen("mkdir "+schedule_dir)
