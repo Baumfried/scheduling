@@ -5,14 +5,19 @@ Just provide one definition file for each subject, named subjectname.txt,
 placed inside a folder ./subjects/, and formatted the following way:
 
 UE
+
 Di 8:00-9:30
+
 Do 10:00-11:30
 
 or
 
 VO
+
 Mo 11:00-12:30
+
 Di 11:00-12:30
+
 Mi 11:00-12:00
 
 - "UE" type subjects will be treated as requiring exactly ONE of the time slots
