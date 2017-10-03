@@ -539,7 +539,6 @@ day0  = 2
 local_files     = glob.glob("*")
 subject_dir     = "." + slash + in_dir_name  + slash
 schedule_dir    = "." + slash + out_dir_name + slash
-
 subjects        = load_subjects(subject_dir)
 
 if out_dir_name in local_files:
