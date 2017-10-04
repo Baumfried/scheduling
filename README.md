@@ -29,6 +29,7 @@ Optional:
 - location
 - color for the subject's graphical representation
   (as either HTML color name or hex code or tuple of RGB values from 0-255)
+
 e.g.:
 
 UE
