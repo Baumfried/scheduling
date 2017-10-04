@@ -361,6 +361,8 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
     first_column   = int(0.0583 * res_x)
     top_row        = int(0.0297 * res_y)
     celltxt_offset = (res_x//400, res_x//400)
+    s1             = res_x // 80
+    s2             = res_x // 100
     bg_color       = "white"
     line_color     = "#cccccc"
     labeltxt_color = "black"
@@ -368,16 +370,16 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
     celltxt_color2 = "black"   # for light background
     
     try:
-        fnt0 = ImageFont.truetype('arialbd.ttf', res_x // 80)
-        fnt1 = ImageFont.truetype('arial.ttf', res_x // 80)
-        fnt2 = ImageFont.truetype('arial.ttf', res_x // 100)
+        fnt0 = ImageFont.truetype('arialbd.ttf', s1)
+        fnt1 = ImageFont.truetype('arial.ttf', s1)
+        fnt2 = ImageFont.truetype('arial.ttf', s2)
     except OSError:
         try:
-            fnt1 = ImageFont.truetype('Pillow/Tests/fonts/FreeSans.ttf', 16)
-            fnt2 = ImageFont.truetype('Pillow/Tests/fonts/FreeSans.ttf', 13)
+            fnt0 = ImageFont.truetype('Pillow/Tests/fonts/FreeSansBold.ttf',s1)
+            fnt1 = ImageFont.truetype('Pillow/Tests/fonts/FreeSans.ttf', s1)
+            fnt2 = ImageFont.truetype('Pillow/Tests/fonts/FreeSans.ttf', s2)
         except OSError:
-            fnt1 = ImageFont.load_default()
-            fnt2 = ImageFont.load_default()
+            fnt0 = fnt1 = fnt2 = ImageFont.load_default()
     
     img  = Image.new("RGB", (res_x, res_y), color=bg_color)
     draw = ImageDraw.Draw(img)
