@@ -32,8 +32,11 @@ Optional:
 e.g.:
 
 UE
+
 steelblue / #4682b4 / 70,130,180
+
 Di 8:00-9:30 Audimax
+
 Do 10:00-11:30 other place
 
 Output will be saved in ./schedules/
