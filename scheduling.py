@@ -296,9 +296,9 @@ def percolate(allocations):
         print("abandoning: duplicate of existing schedule\n")
     else:
         if not schedule.is_incomplete:
-            print("schedule successfully completed!")
+            print("schedule successfully completed!\n")
         else:
-            print("schedule created with at least one lecture incomplete")
+            print("schedule created with at least one lecture incomplete\n")
         version += 1
         saved_schedules.append(schedule)
         if text_file:
@@ -307,7 +307,6 @@ def percolate(allocations):
             fancy_write(schedule)
         if graphical_calendar:
             create_graphical_calendar(schedule, subjects, *cal_resolution)
-        print()
     
     for i in range(len(allocations)):
         allocations[i].advance()
@@ -416,11 +415,12 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
     
     # label first column with times
     t = datetime(year, month, day0, start_of_day)
+    w, h = draw.textsize(re.search(dtpattern, str(t)).group(1)+"-"
+                         +re.search(dtpattern, str(t)).group(1), font=fnt2)
     while t < datetime(year, month, day0, end_of_day):
         t_end = t + timedelta(minutes=15)
         time_str = re.search(dtpattern, str(t)).group(1)+"-"+re.search(
                    dtpattern, str(t_end)).group(1)
-        w, h = draw.textsize(time_str, font=fnt2)
         x = (first_column - w)/2
         y = y_begoftime[t] + (y_begoftime[t_end] - y_begoftime[t] - h)/2
         draw.text((x,y), time_str, fill=labeltxt_color, font=fnt2)
@@ -466,7 +466,7 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
                     celltxto = celltxt_offset
                 
                 x = rect_beg_x + (day_width - w)/2
-                y = rect_beg_y + celltxto[1] - 1
+                y = rect_beg_y + celltxto[1] * 2/3
                 draw.text((x,y), subj_name, fill=celltxt_color, font=fnt1)
                 
                 time_str = (
