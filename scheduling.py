@@ -69,20 +69,19 @@ graphical_calendar = True
 cal_resolution     = (1200,740)
 
 class Schedule:
-    def __init__(self, subjects, allocations, blank, indices):
+    def __init__(self, subjects, alloc_by_subj, blank, dt_by_index):
         self.table = blank.copy()
-        self.create_schedule(subjects, allocations, indices)
+        self.create_schedule(subjects, alloc_by_subj, dt_by_index)
     
-    def create_schedule(self, subjects, allocations, ind):
+    def create_schedule(self, subjects, alloc_by_subj, dtin):
         print("creating new schedule ...")
         
-        for i in range(len(subjects)):
-            for j in range(len(subjects[i].times)):
-                if allocations[i].array[j]:
-                    subject = subjects[i]
-                    selected_time = subject.times[j]
-                    if Schedule.is_free(self.table, selected_time, ind):
-                        Schedule.fill(self.table, subject, selected_time, ind)
+        for subject in subjects:
+            for i in range(len(subject.times)):
+                if alloc_by_subj[subject].enables_timeslot[i]:
+                    selected_time = subject.times[i]
+                    if Schedule.is_free(self.table, selected_time, dtin):
+                        Schedule.fill(self.table, subject, selected_time, dtin)
                         subject.mark_allocated(selected_time)
         
         for subject in subjects:
@@ -90,9 +89,9 @@ class Schedule:
                 for selected_time in subject.times:
                     if (
                         selected_time not in subject.allocated_times and
-                        Schedule.is_free(self.table, selected_time, ind)
+                        Schedule.is_free(self.table, selected_time, dtin)
                     ):
-                        Schedule.fill(self.table, subject, selected_time, ind)
+                        Schedule.fill(self.table, subject, selected_time, dtin)
                         subject.mark_allocated(selected_time)
         
         self.is_incomplete = False
@@ -118,18 +117,18 @@ class Schedule:
                     sched[datetime(year,month,day,hh,mm)] = ""
         return sched
     
-    def is_free(schedule, selected_time, indices):
-        t1 = indices.index(selected_time[0])
-        t2 = indices.index(selected_time[1])
-        for t in range(t1, t2):
-            if schedule[indices[t]]: return False
+    def is_free(schedule, selected_time, dt_by_index):
+        t1 = dt_by_index.index(selected_time[0])
+        t2 = dt_by_index.index(selected_time[1])
+        for i in range(t1, t2):
+            if schedule[dt_by_index[i]]: return False
         return True
     
-    def fill(schedule, subject, selected_time, indices):
-        t1 = indices.index(selected_time[0])
-        t2 = indices.index(selected_time[1])
-        for t in range(t1, t2):
-            schedule[indices[t]] = subject.name
+    def fill(schedule, subject, selected_time, dt_by_index):
+        t1 = dt_by_index.index(selected_time[0])
+        t2 = dt_by_index.index(selected_time[1])
+        for i in range(t1, t2):
+            schedule[dt_by_index[i]] = subject.name
 
 class Subject:
     name_pattern = re.compile(r"(.+)\.txt$")
@@ -140,6 +139,14 @@ class Subject:
     color_tuple_pattern = re.compile(
         r"^\(?(\d{1,3})\)? ?\W? ?\(?(\d{1,3})\)? ?\W? ?\(?(\d{1,3})\)?$")
     color_string_pattern = re.compile(r"(^#[\dA-Fa-f]{3,6}$|^[A-Za-z]+$)")
+    weekday_patterns = list()
+    for i in range(7):
+        daystr = weekdays[i]
+        tmp = ""
+        for j in range(abbreviation_length):
+            tmp += "["+daystr[j]+daystr[j].swapcase()+"]"
+        pat = re.compile(tmp+"("+daystr[abbreviation_length:]+")?$")
+        weekday_patterns.append(pat)
     
     def __init__(self, filename):
         self.name      = re.search(Subject.name_pattern, filename).group(1)
@@ -176,7 +183,7 @@ class Subject:
                     match = re.search(Subject.time_loc_pattern, line)
                     if match:
                         try:
-                            day = day0 + weekday_number(match.group(1))
+                            day = day0 + Subject.weekday_number(match.group(1))
                         except TypeError:
                             print("\nerror: wrong weekday format at subject '"
                                   +self.name+"'\n")
@@ -214,20 +221,19 @@ class Subject:
     def reset(self):
         self.allocated_times = set()
 
+    def weekday_number(weekday):
+        for i in range(7):
+            if re.match(Subject.weekday_patterns[i], weekday): return i
+
 class Allocation:
     def __init__(self, subject):
         self.index = 0
         self.has_reached_end = False
-        self.__array = list()
         tmp = itertools.product([True, False], repeat=len(subject.times))
         if subject.type == "VO":
-            for booltuple in tmp:
-                if any(booltuple):
-                    self.__array.append(booltuple)
+            self.__array = [booltup for booltup in tmp if any(booltup)]
         else:
-            for booltuple in tmp:
-                if sum(booltuple) == 1:
-                    self.__array.append(booltuple)
+            self.__array = [booltup for booltup in tmp if sum(booltup) == 1]
     
     def get_array(self):
         return self.__array[self.index]
@@ -245,11 +251,7 @@ class Allocation:
     def reset_end_status(self):
         self.has_reached_end = False
     
-    array = property(get_array)
-
-def weekday_number(weekday):
-    for i in range(7):
-        if re.match(weekday_patterns[i], weekday): return i
+    enables_timeslot = property(get_array)
 
 def load_subjects(subject_dir):
     filename_pattern   = re.compile(
@@ -270,24 +272,22 @@ def load_subjects(subject_dir):
     
     return subjects
 
-def percolate(allocations):
-    for i in range(len(allocations)):
-        if allocations[i].has_reached_end:
-            allocations[i].reset_end_status()
+def percolate(alloc_by_subj):
+    for subject in alloc_by_subj:
+        if alloc_by_subj[subject].has_reached_end:
+            alloc_by_subj[subject].reset_end_status()
             return
     
     global permutations
-    perm_check_list = list()
-    for element in allocations:
-        perm_check_list.append(element.array)
-    perm_check = tuple(perm_check_list)
+    perm_check = tuple([alloc_by_subj[subject].enables_timeslot
+                        for subject in alloc_by_subj])
     if perm_check in permutations:
         return
     else:
         permutations.add(perm_check)
     
-    global saved_schedules, duplicates, version
-    schedule = Schedule(subjects, allocations, empty_schedule, indices)
+    global saved_schedules, duplicates
+    schedule = Schedule(subjects, alloc_by_subj, blank_schedule, dt_by_index)
     
     if schedule.failed:
         print("abandoning: failed to include all subjects\n")
@@ -299,8 +299,8 @@ def percolate(allocations):
             print("schedule successfully completed!\n")
         else:
             print("schedule created with at least one lecture incomplete\n")
-        version += 1
         saved_schedules.append(schedule)
+        schedule.version = saved_schedules.index(schedule) + 1
         if text_file:
             plain_write(schedule)
         if ascii_calendar:
@@ -308,18 +308,17 @@ def percolate(allocations):
         if graphical_calendar:
             create_graphical_calendar(schedule, subjects, *cal_resolution)
     
-    for i in range(len(allocations)):
-        allocations[i].advance()
-        percolate(allocations)
-        allocations[i].reverse()
+    for subject in alloc_by_subj:
+        alloc_by_subj[subject].advance()
+        percolate(alloc_by_subj)
+        alloc_by_subj[subject].reverse()
 
 def create_filename(schedule):
-    global version
     if schedule.is_incomplete:
         completeness = "_INCOMPLETE_"
     else:
         completeness = ""
-    return "schedule"+str(version)+completeness
+    return "schedule"+str(schedule.version)+completeness
 
 def plain_write(schedule):
     schedule_dir = "./"+out_dir_name+"/"
@@ -328,12 +327,12 @@ def plain_write(schedule):
     
     with open(schedule_dir + schedule_filename, "w") as fh:
         for step in schedule.table:
-            fh.write(weekday_abbrevs[step.weekday()]+" "
-                     +re.search(dtpattern, str(step)).group(1)
+            fh.write(weekdays[step.weekday()][:abbreviation_length]+" "
+                     +re.search(dtpat, str(step)).group(1)
                      +" "+schedule.table[step]+"\n")
 
 def fancy_write(schedule):
-    field_width  = 25
+    field_width  = 30
     row          = "{0:^" + str(field_width) + "s}"
     toprow       = "      "
     for i in range(no_of_days):
@@ -345,10 +344,10 @@ def fancy_write(schedule):
     print("saving as "+schedule_dir+schedule_filename)
     
     with open(schedule_dir + schedule_filename, "w") as fh:
-        t = datetime(year,month,day0,start_of_day)
         fh.write(toprow.format(*weekdays))
+        t = datetime(year,month,day0,start_of_day)
         while t.hour < end_of_day:
-            fh.write("{0:6s}".format(re.search(dtpattern, str(t)).group(1)))
+            fh.write("{0:6s}".format(re.search(dtpat, str(t)).group(1)))
             d = 0
             while d < no_of_days:
                 fh.write(row.format(schedule.table[t]))
@@ -388,21 +387,14 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
     x_begofday = np.linspace(first_column, res_x, no_of_days + 1)
     
     # map y coordinates to times
-    y_begoftime = dict()
-    y_row = np.linspace(top_row, res_y, 12*(end_of_day - start_of_day) + 1)
-    t = datetime(year, month, day0, start_of_day)
-    i = 0
-    while t <= datetime(year, month, day0, end_of_day):
-        y_begoftime[t] = y_row[i]
-        i += 1
-        t += timedelta(minutes=5)
+    n_timeslots = 12 * (end_of_day - start_of_day)
+    y_row = np.linspace(top_row, res_y, n_timeslots + 1)
+    y_begoftime = {dt_by_index[i]: y_row[i] for i in range(n_timeslots)}
+    y_begoftime[datetime(year, month, day0, end_of_day)] = y_row[-1]
     
     # draw horizontal lines
-    t = datetime(year, month, day0, start_of_day)
-    while t < datetime(year, month, day0, end_of_day):
-        draw.line([(0, y_begoftime[t]), (res_x, y_begoftime[t])],
-                   fill = line_color)
-        t += timedelta(minutes=15)
+    for i in range(0, n_timeslots, 3):
+        draw.line([(0, y_row[i]), (res_x, y_row[i])], fill = line_color)
     
     # draw vertical lines
     for i in range(no_of_days):
@@ -416,22 +408,20 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
                   fill=labeltxt_color, font=fnt0)
     
     # label first column with times
-    t = datetime(year, month, day0, start_of_day)
-    w, h = draw.textsize(re.search(dtpattern, str(t)).group(1)+"-"
-                         +re.search(dtpattern, str(t)).group(1), font=fnt2)
-    while t < datetime(year, month, day0, end_of_day):
+    t = dt_by_index[0]
+    w, h = draw.textsize(re.search(dtpat, str(t)).group(1)+"-"
+                         +re.search(dtpat, str(t)).group(1), font=fnt2)
+    for i in range(0, n_timeslots, 3):
+        t = dt_by_index[i]
         t_end = t + timedelta(minutes=15)
-        time_str = re.search(dtpattern, str(t)).group(1)+"-"+re.search(
-                   dtpattern, str(t_end)).group(1)
+        time_str = re.search(dtpat, str(t)).group(1)+"-"+re.search(dtpat,
+                            str(t_end)).group(1)
         x = (first_column - w)/2
         y = y_begoftime[t] + (y_begoftime[t_end] - y_begoftime[t] - h)/2
         draw.text((x,y), time_str, fill=labeltxt_color, font=fnt2)
-        t += timedelta(minutes=15)
     
     # fill calendar
-    subject_dict = dict()
-    for subject in subjects:
-        subject_dict[subject.name] = subject
+    subject_dict = {subject.name: subject for subject in subjects}
     
     for step in schedule.table:
         if schedule.table[step]:
@@ -472,8 +462,8 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
                 draw.text((x,y), subj_name, fill=celltxt_color, font=fnt1)
                 
                 time_str = (
-                    re.search(dtpattern, str(subj_times[0])).group(1)
-                    +" - "+re.search(dtpattern, str(subj_times[1])).group(1)
+                    re.search(dtpat, str(subj_times[0])).group(1)
+                    +" - "+re.search(dtpat, str(subj_times[1])).group(1)
                 )
                 w, h = draw.textsize(time_str, font=fnt1)
                 x = rect_beg_x + celltxto[0]
@@ -496,11 +486,12 @@ def create_graphical_calendar(schedule, subjects, res_x, res_y):
     print("saving graphical calendar as "+schedule_dir+schedule_filename)
     img.save(schedule_dir+schedule_filename)
     
-    global version
-    if version <= 5:
+    global calendars_shown
+    if calendars_shown < 5:
         prev_stack_size = threading.stack_size()
         displaythread = threading.Thread(target=display_calendar, args=(img,))
         displaythread.start()
+        calendars_shown += 1
         threading.stack_size(prev_stack_size)
 
 def display_calendar(image):
@@ -510,38 +501,20 @@ if os.name == "nt":
     slash = "\\"
     slash2 = slash
     delcmd = "del /q"
-    custom_stack_size = 256 * 2**20 - 1 # 256 MiB = Windows limit
-    custom_rec_limit  = 350000    # empirical max: 91162 at  64 MiB stack size
-else:                             #               182343 at 128 MiB
+else:
     slash = "/"
     slash2 = ""
     delcmd = "rm -f"
-    custom_stack_size = 512 * 2**20
-    custom_rec_limit  = 700000
 
-dtpattern = re.compile(r"\d\d-\d\d-\d\d (\d\d:\d\d):\d\d")
-
-weekday_abbrevs = dict()
-for i in range(7):
-    weekday_abbrevs[i] = weekdays[i][:abbreviation_length]
-
-weekday_patterns = list()
-for i in range(7):
-    daystr = weekdays[i]
-    tmp = ""
-    for j in range(abbreviation_length):
-        tmp += "["+daystr[j]+daystr[j].swapcase()+"]"
-    pat = re.compile(tmp+"("+daystr[abbreviation_length:]+")?$")
-    weekday_patterns.append(pat)
-
+dtpat = re.compile(r"\d\d-\d\d-\d\d (\d\d:\d\d):\d\d")
 year  = 2017
 month = 10
 day0  = 2
 
-local_files     = glob.glob("*")
-subject_dir     = "." + slash + in_dir_name  + slash
-schedule_dir    = "." + slash + out_dir_name + slash
-subjects        = load_subjects(subject_dir)
+local_files  = glob.glob("*")
+subject_dir  = "." + slash + in_dir_name  + slash
+schedule_dir = "." + slash + out_dir_name + slash
+subjects     = load_subjects(subject_dir)
 
 if out_dir_name in local_files:
     if cleanup_at_start:
@@ -553,18 +526,21 @@ else:
 
 sleep(0.8)
 
-version         = 0
-duplicates      = 0
 saved_schedules = list()
 permutations    = set()
-empty_schedule  = Schedule.empty_schedule()
-indices         = sorted(empty_schedule.keys())
-allocations     = [Allocation(subject) for subject in subjects]
+duplicates      = 0
+calendars_shown = 0
+blank_schedule  = Schedule.empty_schedule()
+dt_by_index     = sorted(blank_schedule.keys())
+alloc_by_subj   = {subject: Allocation(subject) for subject in subjects}
 
-threading.stack_size(custom_stack_size)
-old_rec_limit = sys.getrecursionlimit()
+custom_stack_size = 256 * 2**20 -1 # 256 MiB = Windows limit
+custom_rec_limit  = 300000         # empirical max: 91162 at  64 MiB stack size
+                                                 # 182343 at 128 MiB
+threading.stack_size(custom_stack_size)          # 167611 at 128 MiB
+old_rec_limit = sys.getrecursionlimit()          # 335379 at 256 MiB
 sys.setrecursionlimit(custom_rec_limit)
-thread = threading.Thread(target = percolate, args = (allocations,))
+thread = threading.Thread(target = percolate, args = (alloc_by_subj,))
 thread.start()
 thread.join()
 sleep(0.2)
