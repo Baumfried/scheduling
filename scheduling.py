@@ -119,14 +119,14 @@ class Schedule:
     
     def is_free(schedule, selected_time, dt_by_index):
         t1 = dt_by_index.index(selected_time[0])
-        t2 = dt_by_index.index(selected_time[1])
+        t2 = dt_by_index.index(selected_time[1] - timedelta(minutes=5)) + 1
         for i in range(t1, t2):
             if schedule[dt_by_index[i]]: return False
         return True
     
     def fill(schedule, subject, selected_time, dt_by_index):
         t1 = dt_by_index.index(selected_time[0])
-        t2 = dt_by_index.index(selected_time[1])
+        t2 = dt_by_index.index(selected_time[1] - timedelta(minutes=5)) + 1
         for i in range(t1, t2):
             schedule[dt_by_index[i]] = subject.name
 
